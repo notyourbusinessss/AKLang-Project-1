@@ -1,0 +1,23 @@
+; Snake rules, pure: no window, no clock, no randomness (the caller passes a number r in 0..1 when food is needed).
+N=20
+(= (place body r)                                         ; a free cell chosen by r
+  free=(~? c=>!(has body c) (~~ y=>(~ x=>[x y] 0..N) 0..N))
+  (? free free[flr(r*#free)] nil))
+(= (fresh r)
+  body=[[10 10] [9 10] [8 10]]
+  {:body body :dir [1 0] :next [1 0] :food (place body r) :score 0 :over false :won false})
+(= (turn st d)                                            ; queue a turn; reversing onto yourself is ignored
+  [dx dy]=st.dir
+  (? (&& d[0]==-dx d[1]==-dy) st (set st "next" d)))
+(= (step st r)
+  (? st.over st
+    (: [dx dy]=st.next [hx hy]=st.body[0]
+       nx=hx+dx ny=hy+dy nh=[nx ny]
+       eat=(== nh st.food)
+       keep=(? eat st.body (take #st.body-1 st.body))   ; the tail moves away unless we grow
+       (? (|| nx<0 ny<0 nx>=N ny>=N (has keep nh)) (set st "over" true)
+         (: body=(+ [nh] keep)
+            full=#body==N*N
+            food=(? (&& eat !full) (place body r) st.food)
+            (set (set (set (set (set st "body" body) "dir" st.next) "food" food) "score" (? eat st.score+1 st.score))
+                 "over" full))))))
