@@ -1,0 +1,73 @@
+; Snake in its own window: Ak's X11 client and software canvas (lib/), no libraries, no browser.
+;   ak snake.aklang        arrows or WASD steer, space pauses, enter or n starts over, q quits      (needs an X11 display or XWayland)
+(use "lib/x11.aklang")
+(use "snake/logic.aklang")
+CELL=24 TOP=84 WW=N*CELL WH=TOP+N*CELL
+BG=(rgb 11 18 32) PANEL=(rgb 17 26 46) GRID=(rgb 20 30 52) HEAD=(rgb 74 222 128) BODY=(rgb 34 160 90) FOOD=(rgb 248 113 113)
+WHITE=(rgb 255 255 255) MUTED=(rgb 148 163 184) INK=(rgb 226 232 240)
+(= (centered cv y s size col) (text cv (// (- WW (text_w s size)) 2) y s size col) nil)
+(= (cell_x c) c*CELL) (= (cell_y c) TOP+c*CELL)
+(= (shade c f) (rgb (* (c>>16&255) f) (* (c>>8&255) f) (* (c&255) f)))
+
+(= (make_base)                                            ; the static scene: background and checker board
+  b=(canvas WW WH)
+  (fill b BG)
+  (rrect b 0 0 WW TOP-8 0 PANEL)
+  (for y N (for x N (rect b (cell_x x) (cell_y y) CELL CELL (? (== (% x+y 2) 0) GRID BG))))
+  b)
+
+(= (draw cv base st best paused)
+  (copy_canvas cv base)
+  [fx fy]=st.food
+  (circle cv (cell_x fx)+CELL//2 (cell_y fy)+CELL//2 CELL//2-3 FOOD)
+  (circle cv (cell_x fx)+CELL//2-3 (cell_y fy)+CELL//2-4 3 WHITE 120)
+  n=#st.body
+  (for [i [x y]] (enum st.body)
+    f=(max 0.55 (- 1 (* 0.5 (/ i n))))
+    (rrect cv (cell_x x)+1 (cell_y y)+1 CELL-2 CELL-2 (? i==0 9 7) (? i==0 HEAD (shade BODY f))))
+  [hx hy]=st.body[0] [dx dy]=st.dir                         ; eyes look where the head goes
+  ex=(cell_x hx)+CELL//2+dx*5 ey=(cell_y hy)+CELL//2+dy*5
+  (for s [-1 1]
+    (circle cv ex+(? dx==0 s*5 0) ey+(? dy==0 s*5 0) 3 WHITE)
+    (circle cv ex+(? dx==0 s*5 0)+dx ey+(? dy==0 s*5 0)+dy 1.5 BG))
+  (text cv 18 14 "Snake" 34 WHITE)
+  (text cv 190 22 (fmt "score %d" st.score) 22 INK)
+  (text cv 330 22 (fmt "best %d" best) 22 MUTED)
+  (? st.over
+       (: (rect cv 0 TOP WW N*CELL BG 170)
+          (centered cv TOP+170 (? st.won "You filled the board!" "Game over") 34 (? st.won HEAD FOOD))
+          (centered cv TOP+224 (fmt "score %d" st.score) 22 INK)
+          (centered cv TOP+264 "enter: play again" 15 MUTED))
+     paused
+       (: (rect cv 0 TOP WW N*CELL BG 150)
+          (centered cv TOP+190 "Paused" 34 WHITE)
+          (centered cv TOP+240 "space: continue" 15 MUTED)))
+  nil)
+
+(= (tick_ms st) (max 55 (- 140 (* 4 st.score))))          ; faster as you eat
+(= (dir_of k) (sw k "up" [0 -1] "w" [0 -1] "down" [0 1] "s" [0 1] "left" [-1 0] "a" [-1 0] "right" [1 0] "d" [1 0] nil))
+
+(= (main)
+  base=(make_base) cv=(canvas WW WH)
+  win=(gui_open "Snake" WW WH)
+  st=(fresh (rand)) best=0 paused=false run=true last=(clock)
+  (draw cv base st best paused) (gui_present win cv)
+  (wh run
+    live=!(|| st.over paused)
+    wait=(? live (max 1 (flr (- (tick_ms st) (- (clock) last)))) nil)   ; sleep until the next step or an event (0 CPU when paused)
+    ev=(gui_event win wait)
+    (? ev
+       (: (? ev.type=="close" run=false
+             (&& ev.type=="key" ev.down)
+               (: k=ev.key d=(dir_of k)
+                  (? (has ["q" "esc"] k) run=false
+                     (has ["enter" "n"] k) (: (<- st (fresh (rand))) (<- paused false) (<- last (clock)))
+                     (&& (== k " ") !st.over) (: (<- paused !paused) (<- last (clock)))
+                     (&& d live) (<- st (turn st d)))))))
+    (? (&& run live (>= (- (clock) last) (tick_ms st)))
+       (: (<- st (step st (rand))) (<- last (clock))
+          (? st.score>best (<- best st.score))))
+    (? run (: (draw cv base st best paused) (gui_present win cv))))
+  (gui_close win)
+  nil)
+(main)

@@ -1,0 +1,35 @@
+(use "logic.aklang")
+(= (is a b msg) (assert (== a b) (++ msg ": got " ($ a) ", want " ($ b))))
+s=(fresh 0.5)
+(is #s.body 3 "starts with 3 segments")
+(assert (!(has s.body s.food)) "food is not on the snake")
+; moves one cell right, same length
+s1=(step s 0.5)
+(is s1.body[0] [11 10] "head moves right")
+(is #s1.body 3 "length unchanged")
+; turning: up works, reversing is ignored
+(is (step (turn s [0 -1]) 0.5).body[0] [10 9] "turn up")
+(is (step (turn s [-1 0]) 0.5).body[0] [11 10] "cannot reverse")
+; eating grows, scores and moves the food
+e=(set s "food" [11 10])
+e1=(step e 0.0)
+(is #e1.body 4 "grows")
+(is e1.score 1 "scores")
+(assert (!= e1.food [11 10]) "new food")
+(assert (!(has e1.body e1.food)) "new food is free")
+; walls
+w=(set s "body" [[19 5] [18 5] [17 5]])
+(assert (step w 0.5).over "hits the right wall")
+(assert (step (set (set s "body" [[3 0] [3 1] [3 2]]) "next" [0 -1]) 0.5).over "hits the top wall")
+; own body
+c=(set (set s "body" [[5 5] [5 6] [6 6] [6 5] [6 4]]) "dir" [0 -1])
+c=(set (set c "next" [1 0]) "food" [0 0])
+(assert (step c 0.5).over "bites itself")
+; the tail cell is free the moment the head arrives
+t=(set (set (set s "body" [[5 5] [5 6] [6 6] [6 5]]) "next" [1 0]) "food" [0 0])
+(assert !(step t 0.5).over "chasing the tail is fine")
+; a finished game stays finished
+(is (step (set s "over" true) 0.5) (set s "over" true) "over is final")
+; place with no free cell
+(is (place (~~ y=>(~ x=>[x y] 0..N) 0..N) 0.3) nil "full board has no food cell")
+(p "snake logic ok")
